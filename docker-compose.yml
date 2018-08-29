@@ -1,0 +1,167 @@
+version: '2.1'
+
+
+
+volumes:
+  mysql-activiti:
+  ssl-certificates:
+  ssl-certificates-data:
+
+  
+  
+
+services:
+
+  rproxy:
+    build:
+      context: ./rproxy
+      args:
+        - machine_domain
+        - formrunner_virtual_path
+    image: rproxy
+    restart: always
+    ports:
+      - "443:443"
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - ssl-certificates:/etc/letsencrypt
+      - ssl-certificates-data:/data/letsencrypt
+    container_name: rproxy
+    hostname: rproxy
+    links:
+      - "activiti-app"
+      - "activiti-admin"
+      - "activiti-rest"
+    healthcheck:
+      test: curl -k --fail https://localhost/activiti-app || exit 1
+      interval: 60s
+      timeout: 60s
+      retries: 3
+    logging:
+      options:
+        max-size: "1m"
+        max-file: "5"     
+      
+      
+  mysql-activiti:
+    build:
+      context: ./mysql-activiti
+    image: mysql-activiti
+    restart: always
+    ports:
+      - "7306:3306"
+    volumes:
+      - mysql-activiti:/var/lib/mysql
+    container_name: mysql-activiti
+    hostname: mysql-activiti
+    environment:
+      - MYSQL_ROOT_PASSWORD=${activiti_mysql_password}
+      - MYSQL_DATABASE=${activiti_mysql_database}
+      - MYSQL_USER=${activiti_mysql_user}
+      - MYSQL_PASSWORD=${activiti_mysql_password}
+    command:
+      - --character-set-server=${character_set}
+      - --collation-server=${database_collation}
+    healthcheck:
+      test: mysql --user=${activiti_mysql_user} --password=${activiti_mysql_password} -e 'select 1;' ${activiti_mysql_database}
+      interval: 60s
+      timeout: 30s
+      retries: 5
+    logging:
+      options:
+        max-size: "1m"
+        
+      
+      
+  activiti-app:
+    build:
+      context: ./activiti-app
+      args:
+        - tomcat_folder
+        - activiti_mysql_database
+        - activiti_mysql_user
+        - activiti_mysql_password
+        - machine_domain
+        - activiti_security_key
+        - activiti_admin_user
+        - activiti_admin_password
+    image: activiti-app
+    restart: always
+    volumes:
+      - /dev/urandom:/dev/random
+    container_name: activiti-app
+    hostname: activiti-app
+    working_dir: /usr/local/tomcat/webapps/activiti-app
+    links:
+      - "mysql-activiti"
+    ports:
+      - "8081:8080"
+    depends_on:
+      mysql-activiti:
+        condition: service_healthy
+    logging:
+      options:
+        max-size: "2m"
+        
+        
+  activiti-admin:
+    build:
+      context: ./activiti-admin
+      args:
+        - tomcat_folder
+        - activiti_mysql_database
+        - activiti_mysql_user
+        - activiti_mysql_password
+        - machine_domain
+        - activiti_security_key
+        - activiti_admin_user
+        - activiti_admin_password
+    image: activiti-admin
+    restart: always
+    volumes:
+      - /dev/urandom:/dev/random
+    container_name: activiti-admin
+    hostname: activiti-admin
+    working_dir: /usr/local/tomcat/webapps/activiti-admin
+    links:
+      - "mysql-activiti"
+    ports:
+      - "8082:8080"
+    depends_on:
+      mysql-activiti:
+        condition: service_healthy
+    logging:
+      options:
+        max-size: "2m"
+        
+        
+  activiti-rest:
+    build:
+      context: ./activiti-rest
+      args:
+        - tomcat_folder
+        - activiti_mysql_database
+        - activiti_mysql_user
+        - activiti_mysql_password
+        - machine_domain
+        - activiti_security_key
+        - activiti_admin_user
+        - activiti_admin_password
+    image: activiti-rest
+    restart: always
+    volumes:
+      - /dev/urandom:/dev/random
+    container_name: activiti-rest
+    hostname: activiti-rest
+    working_dir: /usr/local/tomcat/webapps/activiti-rest
+    links:
+      - "mysql-activiti"
+    ports:
+      - "8083:8080"
+    depends_on:
+      mysql-activiti:
+        condition: service_healthy
+    logging:
+      options:
+        max-size: "2m"
